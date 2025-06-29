@@ -15,20 +15,34 @@ OUT_FILE = pathlib.Path("data/processed/chunks_llm.jsonl")
 TOPICS = "'knn','linear_reg','neural_nets','kernels','misc'"
 
 
+def _escape_backslashes(s: str) -> str:
+    """Escape stray backslashes so ``json.loads`` won't fail."""
+    return re.sub(r"\\(?![\"\\/bfnrtu])", r"\\\\", s)
+
+
 def parse_json(text: str) -> List[Dict[str, str]]:
-    """Extract JSON from an LLM response."""
+    """Extract JSON array from an LLM response."""
     text = text.strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        fence = re.search(r"```json(.*?)```", text, re.DOTALL)
-        if fence:
-            return json.loads(fence.group(1).strip())
-        start = text.find('[')
-        end = text.rfind(']')
-        if start != -1 and end != -1:
-            return json.loads(text[start:end + 1])
-        raise
+    candidates = [text]
+
+    fence = re.search(r"```(?:json)?(.*?)```", text, re.DOTALL)
+    if fence:
+        candidates.insert(0, fence.group(1).strip())
+
+    start = text.find("[")
+    end = text.rfind("]")
+    if start != -1 and end != -1:
+        candidates.insert(0, text[start : end + 1])
+
+    for c in candidates:
+        try:
+            return json.loads(c)
+        except json.JSONDecodeError:
+            try:
+                return json.loads(_escape_backslashes(c))
+            except json.JSONDecodeError:
+                continue
+    raise ValueError("Could not parse JSON from LLM output")
 
 
 def clean_and_chunk(page_text: str, page_id: str) -> List[Dict[str, str]]:
