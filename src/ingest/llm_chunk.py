@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import re
 from typing import List, Dict
 
 from dotenv import load_dotenv
@@ -12,6 +13,22 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 RAW_CHUNKS = pathlib.Path("data/processed/chunks.jsonl")
 OUT_FILE = pathlib.Path("data/processed/chunks_llm.jsonl")
 TOPICS = "'knn','linear_reg','neural_nets','kernels','misc'"
+
+
+def parse_json(text: str) -> List[Dict[str, str]]:
+    """Extract JSON from an LLM response."""
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        fence = re.search(r"```json(.*?)```", text, re.DOTALL)
+        if fence:
+            return json.loads(fence.group(1).strip())
+        start = text.find('[')
+        end = text.rfind(']')
+        if start != -1 and end != -1:
+            return json.loads(text[start:end + 1])
+        raise
 
 
 def clean_and_chunk(page_text: str, page_id: str) -> List[Dict[str, str]]:
@@ -38,7 +55,7 @@ Return a JSON array of these objects.
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
-    return json.loads(resp.choices[0].message.content)
+    return parse_json(resp.choices[0].message.content)
 
 
 def is_garbled(text: str) -> bool:
