@@ -17,6 +17,8 @@ Dwight is going to be an AI assistant using RAG to help you learn concept much f
 2. **Parsing & Chunking**
 
    * Break each document into small “knowledge chunks” (e.g. per definition, per theorem, per Q/A pair).
+   * For messy OCR, run each raw page through `src/ingest/llm_chunk.py` which
+     uses GPT to clean up the text and split it into 3–5 coherent chunks.
    * For each chunk, record metadata:
 
      * **Source** (lecture, midterm-question, solution, etc.)
