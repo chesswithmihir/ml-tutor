@@ -3,8 +3,10 @@ import os
 from typing import List, Dict
 
 import chromadb
+from dotenv import load_dotenv
 from openai import OpenAI
 
+load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 db = chromadb.Client().get_or_create_collection("cs189")
