@@ -2,6 +2,11 @@
 
 Dwight is going to be an AI assistant using RAG to help you learn concept much faster. Learning content refreshers! matched with lecture notes, discussion worksheets, and midterm questions.
 
+## Setup
+
+1. `pip install -r requirements.txt`
+2. Create a `.env` file with `OPENAI_API_KEY=<your key>`
+
 ---
 
 ## 1. Ingest & Preprocess the Documents
