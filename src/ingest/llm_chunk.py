@@ -15,61 +15,56 @@ OUT_FILE = pathlib.Path("data/processed/chunks_llm.jsonl")
 TOPICS = "'knn','linear_reg','neural_nets','kernels','misc'"
 
 
-def _escape_backslashes(s: str) -> str:
-    """Escape stray backslashes so ``json.loads`` won't fail."""
-    return re.sub(r"\\(?![\"\\/bfnrtu])", r"\\\\", s)
-
-
 def parse_json(text: str) -> List[Dict[str, str]]:
-    """Extract JSON array from an LLM response."""
-    text = text.strip()
-    candidates = [text]
+    """Extract JSON array from an LLM response, normalize quotes and remove trailing commas."""
+    # 1) Extract from first '[' to last ']' if present
+    m = re.search(r"\[.*\]", text, re.DOTALL)
+    if not m:
+        raise ValueError("No JSON array found in LLM output")
+    js = m.group(0)
 
-    fence = re.search(r"```(?:json)?(.*?)```", text, re.DOTALL)
-    if fence:
-        candidates.insert(0, fence.group(1).strip())
+    # 2) Replace single-quoted keys in JSON objects with double quotes
+    js = re.sub(r"(?P<pre>[\{\[,]\s*)'(.*?)'(?=\s*:)", r"\1\"\2\"", js)
+    # 3) Replace any remaining single-quoted strings with double quotes
+    js = re.sub(r"(?<!\")'(.*?)'(?!\")", r"\"\1\"", js)
 
-    start = text.find("[")
-    end = text.rfind("]")
-    if start != -1 and end != -1:
-        candidates.insert(0, text[start : end + 1])
+    # 4) Remove trailing commas before ] or }
+    js = re.sub(r",(\s*[\]\}])", r"\1", js)
 
-    for c in candidates:
-        try:
-            return json.loads(c)
-        except json.JSONDecodeError:
-            try:
-                return json.loads(_escape_backslashes(c))
-            except json.JSONDecodeError:
-                continue
-    raise ValueError("Could not parse JSON from LLM output")
+    # 5) Parse
+    return json.loads(js)
 
 
 def clean_and_chunk(page_text: str, page_id: str) -> List[Dict[str, str]]:
     """Call GPT to clean OCR text and split into knowledge chunks."""
     prompt = f"""
-I’m building a tutor.  Here's raw OCR from page {page_id}:
+IMPORTANT: Respond with ONLY a JSON array of objects, no markdown or extra text.
+Each object should have keys: id, topic, text.
+
+I’m building a tutor. Here's raw OCR from page {page_id}:
 
 ```
 {page_text}
 ```
 
 1) Clean up the text: fix broken lines, remove junk characters, restore simple math like x_1, x^2.
-2) Split it into 3–5 “knowledge chunks” (each <=250 words).
+2) Split it into 3–5 'knowledge chunks' (each <=250 words).
 3) For each chunk, provide JSON:
 {{
   "id": "{page_id}_chunk{{n}}",
   "topic": <one of {TOPICS}>,
   "text": "<cleaned chunk>"
 }}
-Return a JSON array of these objects.
+Return ONLY the JSON array of these objects.
 """
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
-    return parse_json(resp.choices[0].message.content)
+    raw = resp.choices[0].message.content
+    print(f"\n\n===== RAW LLM OUTPUT ({page_id}) =====\n{raw}\n========================================\n")
+    return parse_json(raw)
 
 
 def is_garbled(text: str) -> bool:
@@ -83,16 +78,21 @@ def main() -> None:
     with RAW_CHUNKS.open() as src, OUT_FILE.open('w') as dst:
         for line in src:
             page = json.loads(line)
-            cleaned = clean_and_chunk(page["text"], page["id"])
+            try:
+                cleaned = clean_and_chunk(page["text"], page["id"])
+            except ValueError as e:
+                print(f"Failed to parse JSON for page {page['id']}: {e}")
+                continue
             for chunk in cleaned:
-                if is_garbled(chunk["text"]):
-                    print(f"Garbled chunk {chunk['id']}")
+                if is_garbled(chunk.get("text", "")):
+                    print(f"Garbled chunk {chunk.get('id')}")
                     continue
                 chunk.update({
                     "pdf": page["pdf"],
                     "page": page["page"],
                     "source": page["source"],
                 })
+                print(f"Writing chunk {chunk['id']} topic={chunk['topic']}")
                 dst.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
 
