@@ -45,7 +45,7 @@ def query(text: str, k: int = 3):
 
 if __name__ == "__main__":
     queries = [
-        "What is path compression in Union-Find?",
+        "What is a CNN?",
         "Explain the vanishing gradient problem",
         "How do ReLUs help in deep neural networks?",
     ]
@@ -69,4 +69,4 @@ if __name__ == "__main__":
 
         for doc, meta in zip(docs, metas):
             snippet = doc.replace("\n", " ")[:200]
-            print(f" • {meta['pdf']} p{meta['page']} [topic={meta['topic']}] → {snippet}...")
+            print(f" • {meta['pdf']} p{meta['page']} [topic={meta['topic']}] → {snippet}...") 

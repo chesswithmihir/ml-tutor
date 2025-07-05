@@ -1,3 +1,5 @@
+# src/ingest/pdf_split.py
+
 import pdfplumber, pathlib, json, uuid
 from pdf2image import convert_from_path
 

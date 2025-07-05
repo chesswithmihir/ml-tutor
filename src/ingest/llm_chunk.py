@@ -1,3 +1,5 @@
+# src/ingest/llm_chunk.py
+
 import json
 import os
 import pathlib
@@ -12,8 +14,38 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 RAW_CHUNKS = pathlib.Path("data/processed/chunks.jsonl")
 OUT_FILE = pathlib.Path("data/processed/chunks_llm.jsonl")
-TOPICS = "'knn','linear_reg','neural_nets','kernels','misc'"
+TOPICS = [
+    # Classification
+    "perceptron", "hard_margin_svm", "soft_margin_svm",
+    "gaussian_discriminant", "lda", "qda",
+    "logistic_reg", "decision_tree", "random_forest",
+    "adaboost", "knn",
 
+    # Regression
+    "linear_reg", "polynomial_reg",
+    "ridge_reg", "lasso",
+
+    # Neural nets
+    "neural_nets", "backpropagation",
+    "cnn", "batch_norm", "resnet",
+    "adam", "sgd", "vanishing_gradient",
+
+    # Unsupervised & density
+    "pca", "svd", "k_means", "hierarchical_clustering",
+    "density_estimation", "mle",
+
+    # Topics that cut across
+    "bias_variance", "bayes_decision", "map",
+    "gradient_descent", "optimization",
+
+    # Kernels & dimensionality
+    "kernels", "kernel_trick", "dimensionality_reduction",
+
+    # Catch-all
+    "misc"
+]
+# make a quoted, comma-separated list for the prompt
+TOPIC_CHOICES = ", ".join(f"'{t}'" for t in TOPICS)
 
 def parse_json(text: str) -> List[Dict[str, str]]:
     """Extract JSON array from an LLM response, normalize quotes and remove trailing commas."""
@@ -41,7 +73,10 @@ def clean_and_chunk(page_text: str, page_id: str) -> List[Dict[str, str]]:
 IMPORTANT: Respond with ONLY a JSON array of objects, no markdown or extra text.
 Each object should have keys: id, topic, text.
 
-I’m building a tutor. Here's raw OCR from page {page_id}:
+Allowed topics: {TOPIC_CHOICES}
+
+
+I'm building a tutor. Here's raw OCR from page {page_id}:
 
 ```
 {page_text}
@@ -52,9 +87,10 @@ I’m building a tutor. Here's raw OCR from page {page_id}:
 3) For each chunk, provide JSON:
 {{
   "id": "{page_id}_chunk{{n}}",
-  "topic": <one of {TOPICS}>,
-  "text": "<cleaned chunk>"
+  "topic": <one of the allowed topics above>,
+  "text": "<cleaned chunk text>"
 }}
+
 Return ONLY the JSON array of these objects.
 """
     resp = client.chat.completions.create(
